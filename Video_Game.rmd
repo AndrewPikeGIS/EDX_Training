@@ -1,0 +1,147 @@
+---
+title: "Predicting Video Game Sales"
+author: "Andrew Pike"
+date: "02/01/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction:
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The video game industry is estimated to be worth $159.3 billion USD in 2020, a 10% increase over the previous year (WePC, 2020). With hundreds of games being produced a year, what drives games sales? Is there a way to gather some data-based information that could help drive development decisions? The goal of this project is to take a dataset which details video game sales over the past 35 years and extract useful insights about parameters that drive global video game sales. This report will detail steps taken in applying machine learning to global video game sales to try and gain information about key drivers for global sales.
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The dataset that will be used and explored was first pulled from Kaggle.com’s data page. The dataset was posted by Rush Kirubi (Kirubi, 2016) and was produced via a web-scrape from Metacritic. Metacritic is a site where users and critics can submit ratings for movies, tv, music and video games (Metacritic, 2020). The dataset, as downloaded, includes just over 16700 rows and 16 columns. 
+
+
+```{r LoadData, echo= FALSE}
+#load data from saved workspace
+load("~/R_Working/R_Capstone_Video_Game/R_Vid_Gam_Data.RData")
+dfView<- dfVG_Cl[1:5,]
+head(dfView)
+#knitr::kable(dfView)
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Five of the columns are sales related columns, for this analysis the focus will be Global Sales. Sales are reported in millions but were converted to a sales in units number (sales * 10^6). Four of the columns include information about public and critical response to the game. The columns are critic score/count and user score/count. These fields represent the mean score assigned to a game by critics as well as the count of critics that led to that score and the average user score and the number of users that led to that score. Critic/User scores are based on a range from 0-100 and both have a mean of approximately 70. Other Information about the video games include, publisher, developer, title, year the game was released, game platform, game genre and game ESRB rating. The ESRB is the Entertainment Software Rating Board, they provide consumer ratings for users to make appropriate gaming decisions for their families (ESRB, 2020). The ratings are based on in-game violence, explicit language, blood/gore etc., there are 9 total possible ratings. Platform describes the gaming system that the game was released on. There are 31 different platforms listed in this parameter and each game has only one platform listed. Publisher and developer are self explanatory, there are 572 unique values for publisher and 1697 unique values for developer. Genre describes the type of game and includes 13 different unique values. The table is a long and skinny format and games are repeated when they are released on different platforms. The global sales are unique to the platform the game was released on. Three extra parameters were parsed out and created from the dataset to include in model training and testing. The first additional parameter is a grouping of platform to try and reduce the dimensionality of the platform type. The existing levels were grouped into one of three different broader categories, Handheld, PC or Console. In the broader gaming world users are often divided between these categories so they will be used to see if they have predictive power. The second additional field added to the dataset is a sales factor. Sales factor is a measure of a publisher’s success above the norm. Theoretically, publishers who tend to perform above the mean sales will release games that sell better than new publishers with few releases. The publishers with high sales numbers likely have more money for advertising and may be releasing games in well known and beloved game series that will sell above average based on fans of previous versions. The final additional parameter is a simple sum of games released per publisher. The logic is similar to the sales factor, publishers who have sold more games than others may be better established stable publishers that are likely to sell more copies of the new game.
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Two different model types were tested with various combinations of parameter inputs. The approach to training and testing the model involved stepwise inclusion of parameters based on logical relationships. To prevent over-training, 5-fold cross validation was used to train and assess the model. To evaluate model performance R^2 and RMSE was inspected and parameters were included or discarded based on the returned value. The final model is a gradient boosted model that includes platform, genre, user count, critic score, year of release, rating, and sales factor. The model with the lowest RMSE value was ultimately chosen as the final model. It was then tested against validation data set and returned an RMSE value of 957 722.7 copies.
+
+## Methods/Analysis:
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The following libraries were installed (when necessary) and loaded into the working environment.
+```{r loadlibs, echo= TRUE, warning=FALSE, message=FALSE}
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
+if(!require(corrplot)) install.packages("corrplot", repos = "http://cran.us.r-project.org")
+if(!require(ggplot2)) install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+if(!require(readr)) install.packages("readr", repos = "http://cran.us.r-project.org")
+if(!require(Rborist)) install.packages("Rborist", repos = "http://cran.us.r-project.org")
+if(!require(gbm)) install.packages("gbm", repos = "http://cran.us.r-project.org")
+if(!require(knitr)) install.packages("knitr", repos = "http://cran.us.r-project.org")
+
+#load libraries
+library(tidyverse)
+library(caret)
+library(data.table)
+library(dplyr)
+library(corrplot)
+library(ggplot2)
+library(readr)
+library(Rborist)
+library(gbm)
+library(knitr)
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The data was downloaded from Kaggle originally, but it requires authentication to access so it was then hosted in GitHub to make loading the dataset easier and allow script level access. The data is downloaded from the github repository and read into memory. The source for the dataset indicates that there are multiple NA’s in the dataset (Kirubi, 2016), so the next step was to see if the NA’s are temporally dependent. Its possible that the NA’s exist only in older games. Unfortunately, the NA’s are independent of time and littered throughout the dataset. A “clean” version of the dataset was created that removed all rows with NAs and all sales fields except the Global sales field.
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Sales numbers were converted to numerical sales (instead of sales in millions) and central tendencies and distribution were explored. Global sales show a parabolic distribution with most sales below 1 million units and very few games with over 2 million in sales 
+
+```{r ExpSales, echo = FALSE, warning=FALSE}
+knitr::kable(GLStats)
+
+#plot histogram for sales with binwidth at 1 million
+dfVG_Cl %>% ggplot(aes(Global_Sales)) + geom_histogram(binwidth = 1000000) +scale_y_continuous(trans = "log10")
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;All games were assigned a new system type based on grouping the games into one of three categories, PC, Handheld or Console. Year of release and user score were converted to numeric values (from factors). A date type field was created from the numeric year of release field. Sales factor was calculated as total sales per publisher divided by the mean sales for all games. A count of games released for each publisher was added to each game in the dataset. 
+\bigskip
+\bigskip
+```{r DispCleanTab, echo=FALSE}
+head(dfVG_Cl)
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;General trends and relationships between prediction parameters were explore.
+
+```{r PairPlot, echo=FALSE, warning=FALSE }
+#run corr plot
+corrplot(X, method = "number")
+
+#run pairs plot 
+pairs(dfVG_Cl[,Cols], pch = 19, lower.panel = NULL)
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The final cleaned dataset that has all the NA values dropped includes a total of 6984 rows. The data was partitioned into a training set and a validation set using a 90/10 split that leaves 691 rows in the validation set. The 90/10 split ratio was selected to try and keep the number of observations in the training set high to prevent poor representation during cross validation. Correlations between predictive parameters and Global sales were found to be generally low (<0.3).  Interestingly, user count shows a significantly higher correlation to global sales than user score. This may indicate that the more sales a game has the more likely multiple users are willing to rate that game. On the other hand, critics who may be paid to rate video games, are more likely to rate games independent of game sales. The sales factor parameter that was created shows a correlation of 0.19 which is more significant than the games released parameter. There are a couple pairs of highly cross correlated parameters. Sales factor and games released have a Pearson’s r score of 0.89 indicating a strong relationship. Sales factor is based on publisher sales, since a unit of sale would be 1 game it follows that these fields should show correlation. User score and critic score also show a relatively high correlation value (0.58). Not a surprising result, if a game is critically reviewed as good or bad it would be surprising for users to submit ratings that were wildly different. When training the final model, combinations of highly correlated variables were avoided. A look at a plot showing game sales per Genre over time shows a trend towards a temporal and genre-specific trend. Action, Misc, Shooter and sports games seem to sell the most globally. There is an obvious peak in sales in the late 2000’s and a slight decline following the peak and indicates that global sales are temporally dependent.
+
+```{r SaleVsTime, echo=FALSE, warning = FALSE, message=FALSE}
+#run sales over time by genre
+dfVG_Cl %>% group_by(Year_of_Release, Genre, Date) %>%
+  summarize(Sales = sum(Global_Sales)) %>% 
+  ggplot() + geom_area(aes(x=Date, y = Sales, color = Genre, fill = Genre), position = "stack")
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The caret package was used to train the models using the Gradient Boosting Machine and the Random Forest methods. To prevent overtraining 5-fold cross validation was used on all the models tested. Models were iteratively trained with different parameters to test and find the model that returned the lowest RMSE.  Parameters were added and removed based on model performance. When the model with the lowest RMSE was finally selected. It was then used to predict Global sales for the validation (final hold out) dataset and the resulting RMSE was evaluated.
+
+## Results:
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Multiple different parameter combinations and model methods were tested resulting in a range of (cross validated) RMSE values from 1 804 205 – 1 553 156. The R^2 values for the cross validated models ranged from 0.1522 – 0.2981. GBM models performed better than random forest models with the same parameters. Interestingly, a random forest model returned the highest R^2 value of any model with 0.2981. However, that same model also returned the third highest RMSE score at 1704226, so it was discarded. The final model returned a cross validated RMSE value of 1 553 156 and an R^2 of 0.2338. This final model represents a 14% improvement over the worst model tested.
+
+```{r ModelResults, echo=FALSE}
+row.names(RMSETest) <- c("GBM_SYS_GEN_UC_CS", "GBM_SYS_GEN_US_CS",
+                         "GBM_SYS_GEN_UC_CC", "GBM_PLT_GEN_UC_CS",
+                         "GBM_PLT_GEN_UC_CS_YR", "RF_PLT_GEN_UC_CS_YR",
+                         "GBM_PLT_GEN_UC_CS_YR_RT", "GBM_PLT_GEN_UC_CS_YR_GR_SF",
+                         "GBM_PLT_GEN_UC_CS_YR_RT_SF")
+knitr::kable(RMSETest)
+```
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The parameters that performed the best in the 5-fold cross validation GBM model were Platform, Genre, User Count, Critic Score, Rating, Year of Release, and Sales Factor. System type was meant to replace platform and capture the similar variability; however, the model testing showed that using system type over platform tended to return higher RMSE and lower R^2 values. User count and critic score were significant variables in the final model as expected from their correlation to global sales. Rating was also a key indicator in sales with the everyone rating being most important Genre predictor for sales. Theoretically, games that are rated for everyone (E) have a larger intended audience and have higher sales potential. Sales factor was an important variable in model prediction and provides evidence to support the theory that publishers that are historically successful will continue to sell above the industry average. This parameter is possibly capturing the success of games that are released in a series of games. If the first game in a series sells well, the follow up game is likely to sell well based on the success of the first game alone.
+
+```{r VarImp, echo=FALSE}
+varImp(train_gbmSF)
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;When validated against the final hold out dataset the model performed better than in the cross validated samples and returned an RMSE value of 957 722. The mean sales for a game is around 770 000 copies but the standard deviation is almost 2 000 000. Looking at a plot of the predicted values vs true sales numbers shows that predictions are not bad when sales are low (up to about 1.5 million). Beyond that value, dots become much more dispersed and the model is more likely to over or under-estimate sales. 
+
+```{r plotPREDvsTRUE, echo=FALSE}
+#plot predicted against true
+qplot(Compare$Sales, Compare$Predicted)+geom_abline(intercept = 0, slope = 1)
+```
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Looking at the poorly predicted games, we see some interesting trends. 
+
+```{r PlotPoorGames, echo=FALSE}
+knitr::kable(HighErr)
+```
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The games on this list can easily be placed into two categories, a huge success or a bust. In other words, a number of these games wildly outperformed expectations including Call of Duty: Black Ops and The Sims 3. Some games wildly under-performed like Tony Haw’s Pro Skater 5 which was a flop and failed to reach similar numbers to previous versions (Wikipedia, 2021). This is an example of a game getting a boost in prediction from success in previous series but failing to reach the same level of success. The Sales factor parameter would likely be the culprit in these scenarios. There are only 29 observations out of 691 total that have a residual value above 2 000 000. However, the magnitude of these residuals ranges from 2 031 518 to 9 932 721. If these outliers are removed from the RMSE calculation the RMSE drops to 528 373. A potential problem with the model is that it does not force positive sales predictions. Negative sales numbers are impossible, and 21 games receive negative sales values. A quick fix would be to coerce the negative predictions to the lowest reported sales value (10 000). When negative values are forced to 0 the RMSE only changes slightly and drops about 1000 copies so overall not a major source of error.
+
+## Conclusion:
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Video game sales are highly variable and extremely complicated. Using a dataset containing ~17000 video games with ratings. After cleaning up the data, some feature engineering the final training dataset included ~6900 rows.  A Gradient Boosted Machine model was trained on a training dataset and cross validated for RMSE and R^2 values. The final model predicted global sales for the validation data set with an RMSE of ~950 000. This is a large discrepancy relative to the mean sales number of ~770 000. A difference in predicted to actual sales of close to a million could be the difference between success and failure for a smaller company. The main source of error in the final model is the inability of the algorithm to predict outlier’s success or failures in the dataset. Some video games wildly outperform expectations while others fail to reach the level of previous games in a series. Although there are only 26 (depending on where you apply the cut-off) outliers, they come close to doubling the output RMSE. With these outlier values removed the final RMSE is only ~550 000. Given the large swing caused by the outliers, and the huge variety in the dataset (Global Sales standard deviation is almost 2 000 000 units) the final model does an adequate job of predicting sales for the average video game. 
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The final model indicates that high sales values are mainly driven by the number of users that rate the game, critic score, a rating of E or M, being released on a major platform (Wii, Xbox, PS etc), specific Genres and a Sales factor. What insights are most important to a publisher or developer? A developer (if they are not the publisher as well) will sell the most copies if they can link up with a publisher with a history of success (high historical sales numbers). The best sold video games were rated Mature or Everyone. Games released on major platforms like Xbox, Wii, Play Station (and all their versions) tend to sell more copies than smaller platforms like some handhelds. Action, Sports, Misc, Racing, and Shooting games tend to sell more copies than other genre types.  
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Further improvements to the model would include forcing the model to predict positive sales numbers. For a more realistic approach the minimum sales value that can be predicted could be set to the minimum sales number (10 000). That improvement would give us a more realistic prediction range and likely improve prediction RMSE. There are improvements that could be made through more feature engineering. Creating a parameter that captures inclusion in a gaming series could potentially improve upon and replace the sales factor parameter. Further data clean-up to extend the dataset would be the most helpful addition. Increasing the training and test set size could help improve model training and ensure confidence in model performance reporting.
+
+## References:
+
+1.	Video Game Industry Statistics In 2020, WePC, retrieved January 2nd 2021, https://www.wepc.com/news/video-game-statistics/ 
+2.	Video Game Sales With Ratings, Rush Kirubi, 2016, retrieved December 27th 2020, https://www.kaggle.com/rush4ratio/video-game-sales-with-ratings 
+3.	Metacritic, Metacritic, retrieved January 2nd 2021, https://www.metacritic.com/ 
+4.	ESRB Home, ESRB, retrieved January 2nd 2021, https://www.esrb.org/ 
+5.	Tony Hawk’s (Series), Wikipedia, retrieved January 2nd 2021, https://en.wikipedia.org/wiki/Tony_Hawk%27s_(series)
